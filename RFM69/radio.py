@@ -365,7 +365,7 @@ class Radio(object):
         while (self._readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0x00:
             pass
         # DIO0 is "Packet Sent"
-        self._writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00)
+        # self._writeReg(REG_DIOMAPPING1, RF_DIOMAPPING1_DIO0_00)
 
         if (len(buff) > RF69_MAX_DATA_LEN):
             buff = buff[0:RF69_MAX_DATA_LEN]
@@ -375,6 +375,8 @@ class Radio(object):
             ack = 0x80
         elif requestACK:
             ack = 0x40
+
+        # Send data over SPI (write FIFO).
         if isinstance(buff, str):
             self.spi.xfer2([REG_FIFO | 0x80, len(buff) + 3, toAddress, self.address, ack] + [int(ord(i)) for i in list(buff)])
         else:
@@ -382,13 +384,11 @@ class Radio(object):
 
         self.sendLock = True
         self._setMode(RF69_MODE_TX)
-        slept = 0
-        while self.sendLock:
+        txStart = time.time()
+        # Wait for PacketSent.
+        while ((self._readReg(REG_IRQFLAGS2) & RF_IRQFLAGS2_PACKETSENT) == 0x00) and (time.time() - txStart < 1):
             time.sleep(self.sendSleepTime)
-            slept += self.sendSleepTime
-            if slept > 1.0:
-                break
-        self._setMode(RF69_MODE_RX)
+        self._setMode(RF69_MODE_STANDBY)
 
     def _readRSSI(self, forceTrigger = False):
         rssi = 0
